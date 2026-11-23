@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><meta name="theme-color" content="#000000">
+<title>HomePlan</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<style id="gate-css">
+:root{color-scheme:light dark}*{box-sizing:border-box}
+body{margin:0;min-height:100dvh;font:16px/1.5 system-ui,sans-serif;background:light-dark(#eef6f1,#101514);color:light-dark(#14181a,#f1f4f2)}
+#gate{min-height:100dvh;display:grid;place-items:center;padding:24px}
+#gate[hidden]{display:none}
+#gate form{width:min(360px,100%);display:grid;gap:12px}
+#gate h1{margin:0;font-size:32px;letter-spacing:-.02em}#gate p{margin:0}
+#gate img{width:64px;height:64px;border-radius:16px}
+#gate input[type=password]{font:inherit;height:52px;padding:0 14px;border:1.5px solid light-dark(#6c8577,#71877b);border-radius:12px;background:light-dark(#fff,#1a211e);color:inherit;width:100%}
+#gate button{font:inherit;font-weight:650;height:52px;border:0;border-radius:12px;background:#1f7a45;color:#fff;cursor:pointer}
+#gate button:disabled{opacity:.6}
+#gate :focus-visible{outline:3px solid #35a56a;outline-offset:2px}
+#gate label.c{display:flex;gap:10px;align-items:center;min-height:44px}#gate input[type=checkbox]{width:20px;height:20px;accent-color:#1f7a45}
+#err{color:light-dark(#b3202e,#ff8f98);min-height:1.5em}
+</style></head>
+<body><div id="root"></div>
+<main id="gate" hidden><form id="f"><img src="icon-192.png" alt="" width="64" height="64"><h1>HomePlan</h1>
+<label for="p">Hasło dostępu</label><input id="p" type="password" autocomplete="current-password" required aria-describedby="err">
+<p id="err" role="alert"></p><button id="b">Otwórz</button></form></main>
+<script>
+const C={"salt":"jwHtraRyHr2whSm2e41tYg==","iter":600000,"file":"app.89c521b2ac0ed834.bin"};
+const $=i=>document.getElementById(i),un=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const idb=(mode,fn)=>new Promise((ok,no)=>{const o=indexedDB.open('homeplan-gate',1);o.onupgradeneeded=()=>o.result.createObjectStore('k');o.onerror=()=>no(o.error);
+ o.onsuccess=()=>{const t=o.result.transaction('k',mode),q=fn(t.objectStore('k'));t.oncomplete=()=>{o.result.close();ok(q.result)};t.onerror=()=>no(t.error)}});
+async function derive(p){const m=await crypto.subtle.importKey('raw',new TextEncoder().encode(p.trim().normalize('NFC')),'PBKDF2',false,['deriveKey']);
+ return crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt:un(C.salt),iterations:C.iter},m,{name:'AES-GCM',length:256},false,['decrypt'])}
+let box;
+async function payload(){if(!box){const r=await fetch(C.file);if(!r.ok)throw new Error('net');box=new Uint8Array(await r.arrayBuffer())}return box}
+async function dec(key){const d=await payload();return crypto.subtle.decrypt({name:'AES-GCM',iv:d.slice(0,12)},key,d.slice(12))}
+async function start(raw){
+ const {js,css}=await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).json();
+ const s=document.createElement('style');s.textContent=css;document.head.append(s);$('gate-css').remove();$('gate').remove();
+ await import(URL.createObjectURL(new Blob([js],{type:'text/javascript'})))}
+$('f').onsubmit=async e=>{e.preventDefault();$('b').disabled=true;$('b').textContent='Sprawdzam…';$('err').textContent='';
+ try{const key=await derive($('p').value),raw=await dec(key);
+  // Zapamiętujemy nieeksportowalny klucz, nigdy samo hasło.
+  await idb('readwrite',s=>s.put({key},'key')).catch(()=>{});navigator.storage?.persist?.().catch(()=>{});
+  await start(raw)}
+ catch(x){if(!$('b'))throw x;$('err').textContent=x.name==='OperationError'?'Nieprawidłowe hasło.':'Nie udało się wczytać aplikacji. Sprawdź internet.';$('b').disabled=false;$('b').textContent='Otwórz';$('p').select()}};
+(async()=>{let k;try{k=await idb('readonly',s=>s.get('key'));
+  if(k){const raw=await dec(k.key);await start(raw);return}}
+ catch(x){if(!$('gate')){console.error(x);return}if(k&&x.name!=='OperationError')$('err').textContent='Nie udało się wczytać aplikacji. Sprawdź internet.'}
+ $('gate').hidden=false;$('p').focus()})();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
